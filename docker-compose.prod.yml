@@ -1,0 +1,161 @@
+# Production stack for Kawalec Command Center on kawalec-vps (Hetzner).
+# Public entrypoint: Caddy on :443 (TLS via Let's Encrypt) → app:3000.
+# App / Postgres / Redis / Meilisearch are private (no host port mapping).
+#
+# First-time deploy:
+#   cp .env.production.example .env
+#   # fill secrets in .env
+#   docker compose -f docker-compose.prod.yml build --no-cache
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Upgrade flow:
+#   git pull
+#   docker compose -f docker-compose.prod.yml build app
+#   docker compose -f docker-compose.prod.yml up -d app
+#   # Migrations + kawalec setup-crm run automatically via init-or-migrate.sh
+#
+# Backups: see docs/deployment.md (pg_dump + storage tarball cron → external S3).
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    networks:
+      - mercato-prod
+
+  app:
+    build:
+      context: .
+      args:
+        - CONTAINER_PORT=3000
+    user: "0"
+    restart: unless-stopped
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        if [ ! -f /app/docker/scripts/init-or-migrate.sh ]; then
+          echo "ERROR: init-or-migrate.sh not found. Rebuild: docker compose build --no-cache app"
+          exit 1
+        fi
+        sh /app/docker/scripts/init-or-migrate.sh
+        yarn start
+    working_dir: /app
+    volumes:
+      - init_marker:/tmp/init-marker
+      - attachments_storage:/app/storage
+    expose:
+      - "3000"
+    environment:
+      NODE_ENV: production
+      DEPLOY_ENV: ${DEPLOY_ENV:-production}
+      PORT: 3000
+      APP_URL: ${APP_URL:?APP_URL must be set, e.g. https://cc.kawalec.pl}
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set}
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set}
+      TENANT_DATA_ENCRYPTION: "true"
+      TENANT_DATA_ENCRYPTION_KEY: ${TENANT_DATA_ENCRYPTION_KEY:?TENANT_DATA_ENCRYPTION_KEY must be set (32+ chars)}
+      CACHE_STRATEGY: redis
+      CACHE_REDIS_URL: redis://redis:6379
+      ENABLE_CRUD_API_CACHE: "true"
+      EVENTS_REDIS_URL: redis://redis:6379
+      MEILISEARCH_HOST: http://meilisearch:7700
+      MEILISEARCH_API_KEY: ${MEILISEARCH_API_KEY:?MEILISEARCH_API_KEY must be set}
+      MEILISEARCH_MASTER_KEY: ${MEILISEARCH_MASTER_KEY:?MEILISEARCH_MASTER_KEY must be set}
+      OM_AI_PROVIDER: ${OM_AI_PROVIDER:-google}
+      OM_AI_MODEL: ${OM_AI_MODEL:-google/gemini-2.5-flash}
+      GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?ADMIN_EMAIL must be set}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      NOTIFICATIONS_EMAIL_FROM: ${NOTIFICATIONS_EMAIL_FROM:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      DEMO_MODE: "false"
+      SELF_SERVICE_ONBOARDING_ENABLED: "false"
+      # Run kawalec post-init seed after standard initialize.
+      # Idempotent: safe to re-run.
+      INIT_COMMAND: "yarn initialize && yarn mercato kawalec setup-crm"
+      OM_INIT_SUPERADMIN_EMAIL: ${OM_INIT_SUPERADMIN_EMAIL:?OM_INIT_SUPERADMIN_EMAIL must be set}
+      OM_INIT_SUPERADMIN_PASSWORD: ${OM_INIT_SUPERADMIN_PASSWORD:?OM_INIT_SUPERADMIN_PASSWORD must be set}
+      AUTO_SPAWN_WORKERS: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+    networks:
+      - mercato-prod
+
+  postgres:
+    image: pgvector/pgvector:pg17-trixie
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:-command_center}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - mercato-prod
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mercato-prod
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.11
+    restart: unless-stopped
+    environment:
+      MEILI_ENV: production
+      MEILI_MASTER_KEY: ${MEILISEARCH_MASTER_KEY}
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - meilisearch_data:/meili_data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mercato-prod
+
+volumes:
+  postgres_data:
+  redis_data:
+  meilisearch_data:
+  init_marker:
+  attachments_storage:
+  caddy_data:
+  caddy_config:
+
+networks:
+  mercato-prod:
+    driver: bridge

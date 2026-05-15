@@ -22,6 +22,8 @@ export const enabledModules: ModuleEntry[] = [
   { id: 'dictionaries', from: '@open-mercato/core' },
   { id: 'feature_toggles', from: '@open-mercato/core' },
   { id: 'ai_assistant', from: '@open-mercato/ai-assistant' },
+  // App overlay: project-specific seed CLI + RBAC features.
+  { id: 'kawalec', from: '@app' },
 ]
 
 const enterpriseModulesEnabled = parseBooleanWithDefault(process.env.OM_ENABLE_ENTERPRISE_MODULES, false)

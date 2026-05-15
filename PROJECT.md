@@ -35,9 +35,28 @@ Aplikacja OM standalone, single-tenant agencyjny. Migracja z Twenty CRM, MCP ser
 
 ## Włączone moduły (`src/modules.ts`)
 
-Z presetu `crm` + dodane dla Fazy 1: `sales`, `tasks`, `attachments`, `integrations`.
+Z presetu `crm` + dodane dla Fazy 1: `attachments`, `integrations`.
 
-Pełna lista: `auth`, `directory`, `configs`, `entities`, `query_index`, `api_docs`, `audit_logs`, `notifications`, `dashboards`, `events`, `customers`, `sales`, `tasks`, `attachments`, `integrations`, `dictionaries`, `feature_toggles`, `ai_assistant`.
+Pełna lista: `auth`, `directory`, `configs`, `entities`, `query_index`, `api_docs`, `audit_logs`, `notifications`, `dashboards`, `events`, `customers`, `attachments`, `integrations`, `dictionaries`, `feature_toggles`, `ai_assistant`.
+
+### Ważne — mapowanie pojęć PRD → OM core
+
+PRD v0.1 błędnie zakładał, że deal/opportunity i pipeline są w module `sales`. **Faktycznie w OM core cały CRM (pipeline, deals, todos, activities) żyje w module `customers`**:
+
+| PRD nazewnictwo | Faktyczna lokalizacja w OM core |
+|-----------------|----------------------------------|
+| `sales.Opportunity` (deal) | `customers.CustomerDeal` |
+| Pipeline + Stages | `customers.CustomerPipeline` + `customers.CustomerPipelineStage` |
+| Person / Company | `customers.CustomerEntity` (kind discriminator: `person` / `company`) |
+| Profile pól dodatkowych | `customers.CustomerPersonProfile`, `customers.CustomerCompanyProfile` |
+| Deal ↔ Person / Company | `customers.CustomerDealPersonLink`, `customers.CustomerDealCompanyLink` |
+| Historia zmian stage'u | `customers.CustomerDealStageTransition` |
+| Tasks / todos podpięte do encji | `customers.CustomerTodoLink` (+ Todo entity) |
+| Notatki, aktywności, komentarze | `customers.CustomerActivity`, `customers.CustomerInteraction`, `customers.CustomerComment` |
+| Tagi / labelki | `customers.CustomerLabel`, `customers.CustomerTag` |
+| Słowniki (lead source, industry) | `customers.CustomerDictionaryEntry` + `CustomerDictionaryKindSetting` |
+
+**Moduł `sales` w OM core to fakturowanie:** `SalesQuote → SalesOrder → SalesInvoice` flow, `SalesCreditMemo`, `SalesPayment`, `SalesShipment`, `SalesTaxRate`. Włączymy go dopiero w **Fazie 5** (billing).
 
 ## Pipeline (do skonfigurowania w setup.ts overlaya)
 

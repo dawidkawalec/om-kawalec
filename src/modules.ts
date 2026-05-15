@@ -17,8 +17,6 @@ export const enabledModules: ModuleEntry[] = [
   { id: 'dashboards', from: '@open-mercato/core' },
   { id: 'events', from: '@open-mercato/events' },
   { id: 'customers', from: '@open-mercato/core' },
-  { id: 'sales', from: '@open-mercato/core' },
-  { id: 'tasks', from: '@open-mercato/core' },
   { id: 'attachments', from: '@open-mercato/core' },
   { id: 'integrations', from: '@open-mercato/core' },
   { id: 'dictionaries', from: '@open-mercato/core' },

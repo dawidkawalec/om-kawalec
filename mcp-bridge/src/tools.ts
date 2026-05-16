@@ -13,16 +13,21 @@ type Config = {
 
 type TokenCache = { token: string; expiresAt: number }
 
+// Must stay in sync with PIPELINE_STAGES in src/modules/kawalec/cli.ts.
+// 1:1 mirror of the agency's Twenty workspace pipeline.
 const STAGES = [
-  'loose',
-  'lead',
-  'qualified',
-  'discovery',
+  'new',
+  'przetargi',
+  'screening',
   'proposal',
-  'negotiation',
-  'won',
-  'lost',
-  'stalled',
+  'potwierdzono',
+  'faktura_zaliczkowa',
+  'w_realizacji',
+  'faktura_koncowa',
+  'w_akceptacji',
+  'zakonczenie',
+  'mrr',
+  'odrzucono',
 ] as const
 
 export const TOOLS: Tool[] = [
@@ -53,7 +58,7 @@ export const TOOLS: Tool[] = [
   {
     name: 'list_deals',
     description:
-      'List sales deals (opportunities). Optionally filter by `stage` (one of: lead, qualified, proposal, negotiation, won, lost, discovery, loose, stalled) or text `query` across titles.',
+      'List sales deals (opportunities). Optionally filter by `stage` (one of: new, przetargi, screening, proposal, potwierdzono, faktura_zaliczkowa, w_realizacji, faktura_koncowa, w_akceptacji, zakonczenie, mrr, odrzucono) or text `query` across titles.',
     inputSchema: {
       type: 'object',
       properties: {

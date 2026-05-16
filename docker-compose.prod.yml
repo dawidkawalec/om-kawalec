@@ -77,6 +77,10 @@ services:
       OM_INIT_SUPERADMIN_EMAIL: ${OM_INIT_SUPERADMIN_EMAIL:?OM_INIT_SUPERADMIN_EMAIL must be set}
       OM_INIT_SUPERADMIN_PASSWORD: ${OM_INIT_SUPERADMIN_PASSWORD:?OM_INIT_SUPERADMIN_PASSWORD must be set}
       AUTO_SPAWN_WORKERS: "true"
+      # Optional: source DB for `mercato kawalec import-twenty`.
+      # Requires `docker network connect twenty_default cc-app` so Docker DNS
+      # resolves twenty-db-1.
+      TWENTY_DATABASE_URL: ${TWENTY_DATABASE_URL:-}
     depends_on:
       postgres:
         condition: service_healthy

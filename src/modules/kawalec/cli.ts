@@ -1,4 +1,5 @@
 import { createRequestContainer } from '@open-mercato/shared/lib/di/container'
+import { importTwenty } from './import-twenty'
 
 type HybridStage = {
   name: string
@@ -198,5 +199,45 @@ const setupCrm = {
   },
 }
 
-const kawalecCli = [setupCrm]
+const importTwentyCmd = {
+  command: 'import-twenty',
+  async run(rest: string[]): Promise<void> {
+    const args = parseArgs(rest)
+    const twentyUrl =
+      args.twenty || args['twenty-url'] || process.env.TWENTY_DATABASE_URL || ''
+    const appUrl = args['app-url'] || process.env.APP_URL || 'http://localhost:3000'
+    const email =
+      args.email || process.env.OM_INIT_SUPERADMIN_EMAIL || ''
+    const password =
+      args.password || process.env.OM_INIT_SUPERADMIN_PASSWORD || ''
+    const dryRun = args['dry-run'] === 'true' || args.dryRun === 'true'
+    const limit = args.limit ? Number(args.limit) : undefined
+
+    if (!twentyUrl) {
+      console.error(
+        'Missing TWENTY_DATABASE_URL. Pass --twenty <postgres-url> or set TWENTY_DATABASE_URL in .env.',
+      )
+      return
+    }
+    if (!dryRun && (!email || !password)) {
+      console.error(
+        'Need OM superadmin credentials. Pass --email and --password, or set OM_INIT_SUPERADMIN_EMAIL/PASSWORD.',
+      )
+      return
+    }
+
+    console.log(`Importing from Twenty -> ${appUrl} (dryRun=${dryRun}, limit=${limit ?? 'none'})`)
+    const stats = await importTwenty({
+      twentyUrl,
+      appUrl,
+      superadminEmail: email,
+      superadminPassword: password,
+      dryRun,
+      limit,
+    })
+    console.log(`\nDone. companies=${stats.companies} people=${stats.people} deals=${stats.deals} skippedExisting=${stats.skippedExisting}`)
+  },
+}
+
+const kawalecCli = [setupCrm, importTwentyCmd]
 export default kawalecCli

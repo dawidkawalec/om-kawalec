@@ -1,0 +1,27 @@
+{
+  "name": "@kawalec/mcp-bridge",
+  "version": "0.1.0",
+  "description": "stdio MCP bridge that exposes the Kawalec Command Center (Open Mercato) over the Model Context Protocol for Claude Desktop / Claude Code / Cursor.",
+  "license": "Proprietary",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "kawalec-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4",
+    "typescript": "^5.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

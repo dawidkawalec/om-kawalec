@@ -243,7 +243,11 @@ export async function importTwenty(opts: {
         stats.people++
         continue
       }
+      const firstName = (row.first_name || '').trim() || (row.email ? row.email.split('@')[0] : fullName)
+      const lastName = (row.last_name || '').trim() || '-'
       const created = await omRequest<any>(opts.appUrl, cookie, 'POST', '/api/customers/people', {
+        firstName,
+        lastName,
         displayName: fullName,
         primaryEmail: row.email || undefined,
         primaryPhone: phone,

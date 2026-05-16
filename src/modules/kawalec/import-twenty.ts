@@ -267,6 +267,8 @@ export async function importTwenty(opts: {
     // -- Deals --
     const skippedBeforeDeals = stats.skippedExisting
     let existingDealByTitle = new Map<string, string>()
+    let defaultPipelineId: string | undefined
+    let stageIdByValue = new Map<string, string>()
     if (!opts.dryRun) {
       const list = await omRequest<any>(
         opts.appUrl,
@@ -276,6 +278,35 @@ export async function importTwenty(opts: {
       )
       for (const d of pickItems(list)) {
         if (d?.title && d?.id) existingDealByTitle.set(d.title, d.id)
+      }
+      // Resolve default pipeline + stage ids so POST /deals lands rows on the Kanban.
+      const pipelinesList = await omRequest<any>(
+        opts.appUrl,
+        cookie,
+        'GET',
+        '/api/customers/pipelines',
+      )
+      for (const p of pickItems(pipelinesList)) {
+        if (p?.is_default || p?.isDefault) {
+          defaultPipelineId = p.id
+          break
+        }
+      }
+      if (!defaultPipelineId) {
+        const items = pickItems<any>(pipelinesList)
+        defaultPipelineId = items[0]?.id
+      }
+      if (defaultPipelineId) {
+        const stagesList = await omRequest<any>(
+          opts.appUrl,
+          cookie,
+          'GET',
+          `/api/customers/pipeline-stages?pipeline_id=${defaultPipelineId}`,
+        )
+        for (const s of pickItems(stagesList)) {
+          const name = (s?.name ?? s?.label ?? '').toString().toLowerCase().trim()
+          if (name && s?.id) stageIdByValue.set(name, s.id)
+        }
       }
     }
     const oppRes = await tw.query(
@@ -311,6 +342,8 @@ export async function importTwenty(opts: {
         title,
         status,
         pipelineStage: stageValue,
+        pipelineId: defaultPipelineId,
+        pipelineStageId: stageIdByValue.get(stageValue),
         valueAmount: amount,
         valueCurrency: row.ccy || 'PLN',
         expectedCloseAt: row.close_date,

@@ -45,10 +45,13 @@ async function login(
   email: string,
   password: string,
 ): Promise<string> {
+  // OM's /api/auth/login expects application/x-www-form-urlencoded or
+  // multipart/form-data — not JSON. Sending JSON yields 400 "Invalid email or password".
+  const body = new URLSearchParams({ email, password }).toString()
   const res = await fetch(`${appUrl}/api/auth/login`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body,
     redirect: 'manual',
   })
   // OM may respond 200 with cookies, or 302 redirect-with-set-cookie.

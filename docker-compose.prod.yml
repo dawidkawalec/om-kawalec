@@ -1,43 +1,31 @@
-# Production stack for Kawalec Command Center on kawalec-vps (Hetzner).
-# Public entrypoint: Caddy on :443 (TLS via Let's Encrypt) → app:3000.
-# App / Postgres / Redis / Meilisearch are private (no host port mapping).
+# Production stack for Kawalec Command Center on kawalec-vps.
+# Shared Caddy on the host (kawalec/caddy-geoip2) terminates TLS for
+# *.kawalec.pl and reverse-proxies into the `proxy` external network.
+# Our service alias in that network is `cc-app:3000`.
 #
 # First-time deploy:
-#   cp .env.production.example .env
-#   # fill secrets in .env
+#   cd /root/stacks
+#   git clone https://github.com/dawidkawalec/om-kawalec.git command-center
+#   cd command-center
+#   cp .env.production.example .env && $EDITOR .env
 #   docker compose -f docker-compose.prod.yml build --no-cache
 #   docker compose -f docker-compose.prod.yml up -d
+#   # Then add the vhost to /root/stacks/caddy/Caddyfile (see docs/deployment.md)
 #
-# Upgrade flow:
+# Upgrade:
 #   git pull
 #   docker compose -f docker-compose.prod.yml build app
 #   docker compose -f docker-compose.prod.yml up -d app
-#   # Migrations + kawalec setup-crm run automatically via init-or-migrate.sh
-#
-# Backups: see docs/deployment.md (pg_dump + storage tarball cron → external S3).
+
+name: command-center
 
 services:
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - app
-    networks:
-      - mercato-prod
-
   app:
     build:
       context: .
       args:
         - CONTAINER_PORT=3000
+    container_name: cc-app
     user: "0"
     restart: unless-stopped
     command:
@@ -84,8 +72,7 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       DEMO_MODE: "false"
       SELF_SERVICE_ONBOARDING_ENABLED: "false"
-      # Run kawalec post-init seed after standard initialize.
-      # Idempotent: safe to re-run.
+      # Run kawalec post-init seed after standard initialize. Idempotent.
       INIT_COMMAND: "yarn initialize && yarn mercato kawalec setup-crm"
       OM_INIT_SUPERADMIN_EMAIL: ${OM_INIT_SUPERADMIN_EMAIL:?OM_INIT_SUPERADMIN_EMAIL must be set}
       OM_INIT_SUPERADMIN_PASSWORD: ${OM_INIT_SUPERADMIN_PASSWORD:?OM_INIT_SUPERADMIN_PASSWORD must be set}
@@ -98,7 +85,8 @@ services:
       meilisearch:
         condition: service_healthy
     networks:
-      - mercato-prod
+      - default
+      - proxy
 
   postgres:
     image: pgvector/pgvector:pg17-trixie
@@ -115,7 +103,7 @@ services:
       timeout: 5s
       retries: 10
     networks:
-      - mercato-prod
+      - default
 
   redis:
     image: redis:7-alpine
@@ -128,7 +116,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - mercato-prod
+      - default
 
   meilisearch:
     image: getmeili/meilisearch:v1.11
@@ -145,7 +133,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - mercato-prod
+      - default
 
 volumes:
   postgres_data:
@@ -153,9 +141,9 @@ volumes:
   meilisearch_data:
   init_marker:
   attachments_storage:
-  caddy_data:
-  caddy_config:
 
 networks:
-  mercato-prod:
+  default:
     driver: bridge
+  proxy:
+    external: true

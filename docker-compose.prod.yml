@@ -139,6 +139,23 @@ services:
     networks:
       - default
 
+  mcp:
+    build:
+      context: ./mcp-bridge
+    container_name: cc-mcp
+    restart: unless-stopped
+    expose:
+      - "3100"
+    environment:
+      MCP_HTTP_PORT: "3100"
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:?MCP_AUTH_TOKEN must be set}
+      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-mcp.cc.kawalec.pl}
+      OM_URL: ${APP_URL:-https://cc.kawalec.pl}
+      OM_EMAIL: ${OM_INIT_SUPERADMIN_EMAIL}
+      OM_PASSWORD: ${OM_INIT_SUPERADMIN_PASSWORD}
+    networks:
+      - proxy
+
 volumes:
   postgres_data:
   redis_data:

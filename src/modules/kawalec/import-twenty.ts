@@ -1,4 +1,7 @@
-import { Client as PgClient } from 'pg'
+import pg from 'pg'
+
+const { Client: PgClient } = pg
+type PgClient = InstanceType<typeof PgClient>
 
 export type Scope = { tenantId: string; organizationId: string }
 

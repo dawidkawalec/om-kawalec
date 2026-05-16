@@ -1,7 +1,7 @@
 import { createRequestContainer } from '@open-mercato/shared/lib/di/container'
 import { importTwenty } from './import-twenty'
 
-type HybridStage = {
+type PipelineStage = {
   name: string
   value: string
   label: string
@@ -9,16 +9,21 @@ type HybridStage = {
   icon: string
 }
 
-const HYBRID_STAGES: HybridStage[] = [
-  { name: 'Loose',       value: 'loose',       label: 'Loose',       color: '#a3a3a3', icon: 'lucide:bookmark'    },
-  { name: 'Lead',        value: 'lead',        label: 'Lead',        color: '#3b82f6', icon: 'lucide:sparkles'    },
-  { name: 'Qualified',   value: 'qualified',   label: 'Qualified',   color: '#8b5cf6', icon: 'lucide:badge-check' },
-  { name: 'Discovery',   value: 'discovery',   label: 'Discovery',   color: '#06b6d4', icon: 'lucide:search'      },
-  { name: 'Proposal',    value: 'proposal',    label: 'Proposal',    color: '#f97316', icon: 'lucide:file-text'   },
-  { name: 'Negotiation', value: 'negotiation', label: 'Negotiation', color: '#facc15', icon: 'lucide:handshake'   },
-  { name: 'Won',         value: 'won',         label: 'Won',         color: '#16a34a', icon: 'lucide:trophy'      },
-  { name: 'Lost',        value: 'lost',        label: 'Lost',        color: '#ef4444', icon: 'lucide:x-circle'    },
-  { name: 'Stalled',     value: 'stalled',     label: 'Stalled',     color: '#6b7280', icon: 'lucide:pause'       },
+// 1:1 mirror of the agency's Twenty pipeline (workspace-customized
+// opportunity_stage_enum). Order matches the funnel left-to-right.
+const PIPELINE_STAGES: PipelineStage[] = [
+  { name: 'Nowy',               value: 'new',                 label: 'Nowy',               color: '#94a3b8', icon: 'lucide:sparkles'      },
+  { name: 'Przetargi',          value: 'przetargi',           label: 'Przetargi',          color: '#6366f1', icon: 'lucide:gavel'         },
+  { name: 'Screening',          value: 'screening',           label: 'Screening',          color: '#3b82f6', icon: 'lucide:filter'        },
+  { name: 'Oferta',             value: 'proposal',            label: 'Oferta',             color: '#f97316', icon: 'lucide:file-text'     },
+  { name: 'Potwierdzono',       value: 'potwierdzono',        label: 'Potwierdzono',       color: '#22c55e', icon: 'lucide:check-circle-2'},
+  { name: 'Faktura zaliczkowa', value: 'faktura_zaliczkowa',  label: 'Faktura zaliczkowa', color: '#06b6d4', icon: 'lucide:file-text'     },
+  { name: 'W realizacji',       value: 'w_realizacji',        label: 'W realizacji',       color: '#eab308', icon: 'lucide:loader'        },
+  { name: 'Faktura końcowa',    value: 'faktura_koncowa',     label: 'Faktura końcowa',    color: '#0891b2', icon: 'lucide:file-check'    },
+  { name: 'W akceptacji',       value: 'w_akceptacji',        label: 'W akceptacji',       color: '#a855f7', icon: 'lucide:eye'           },
+  { name: 'Zakończenie',        value: 'zakonczenie',         label: 'Zakończenie',        color: '#16a34a', icon: 'lucide:trophy'        },
+  { name: 'MRR',                value: 'mrr',                 label: 'MRR',                color: '#14b8a6', icon: 'lucide:repeat'        },
+  { name: 'Odrzucono',          value: 'odrzucono',           label: 'Odrzucono',          color: '#ef4444', icon: 'lucide:x-circle'      },
 ]
 
 function parseArgs(rest: string[]): Record<string, string> {
@@ -107,8 +112,8 @@ const setupCrm = {
         [pipelineId],
       )
       await conn.execute(`DELETE FROM customer_pipeline_stages WHERE pipeline_id = ?`, [pipelineId])
-      for (let i = 0; i < HYBRID_STAGES.length; i++) {
-        const stage = HYBRID_STAGES[i]
+      for (let i = 0; i < PIPELINE_STAGES.length; i++) {
+        const stage = PIPELINE_STAGES[i]
         await conn.execute(
           `INSERT INTO customer_pipeline_stages (organization_id, tenant_id, pipeline_id, name, position, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, now(), now())`,
@@ -123,17 +128,34 @@ const setupCrm = {
           WHERE s.pipeline_id = d.pipeline_id
             AND LOWER(s.name) = LOWER(d.pipeline_stage)`,
       )
+      // Compat aliases: existing rows that still hold legacy or OM-scaffold
+      // stage values get rewritten to the closest Twenty-pipeline equivalent.
+      // The Twenty importer subsequently overwrites these with the precise
+      // per-deal stage when it runs.
       const LEGACY_ALIASES: Array<[string, string]> = [
-        ['opportunity', 'Qualified'],
-        ['marketing_qualified_lead', 'Lead'],
-        ['sales_qualified_lead', 'Qualified'],
-        ['offering', 'Proposal'],
-        ['negotiations', 'Negotiation'],
-        ['win', 'Won'],
+        // legacy hybrid (Phase 1 v1) -> Twenty equivalents
+        ['lead', 'Nowy'],
+        ['qualified', 'Screening'],
+        ['discovery', 'Screening'],
+        ['proposal', 'Oferta'],
+        ['negotiation', 'Oferta'],
+        ['won', 'Zakończenie'],
+        ['lost', 'Odrzucono'],
+        ['loose', 'Odrzucono'],
+        ['stalled', 'Odrzucono'],
+        // OM scaffold example values
+        ['opportunity', 'Screening'],
+        ['marketing_qualified_lead', 'Nowy'],
+        ['sales_qualified_lead', 'Screening'],
+        ['offering', 'Oferta'],
+        ['negotiations', 'Oferta'],
+        ['win', 'Zakończenie'],
       ]
       for (const [legacy, target] of LEGACY_ALIASES) {
+        const stageDef = PIPELINE_STAGES.find((s) => s.name === target)
+        if (!stageDef) continue
         const legacyLc = legacy.toLowerCase().replace(/'/g, "''")
-        const targetLc = target.toLowerCase().replace(/'/g, "''")
+        const targetValue = stageDef.value.replace(/'/g, "''")
         const targetName = target.replace(/'/g, "''")
         const sqlText = `UPDATE customer_deals SET
               pipeline_stage_id = (
@@ -142,7 +164,7 @@ const setupCrm = {
                    AND name = '${targetName}'
                  LIMIT 1
               ),
-              pipeline_stage = '${targetLc}'
+              pipeline_stage = '${targetValue}'
             WHERE pipeline_stage_id IS NULL
               AND LOWER(pipeline_stage) = '${legacyLc}'
             RETURNING id`
@@ -158,7 +180,7 @@ const setupCrm = {
           WHERE tenant_id = ? AND organization_id = ? AND kind = 'pipeline_stage'`,
         [tenantId, organizationId],
       )
-      for (const stage of HYBRID_STAGES) {
+      for (const stage of PIPELINE_STAGES) {
         await conn.execute(
           `INSERT INTO customer_dictionary_entries
              (organization_id, tenant_id, kind, value, normalized_value, label, color, icon, created_at, updated_at)
@@ -195,7 +217,7 @@ const setupCrm = {
     })
 
     console.log(`Kawalec CRM setup applied (tenant=${tenantId}, org=${organizationId}).`)
-    console.log(`Stages: ${HYBRID_STAGES.map((s) => s.name).join(' / ')}`)
+    console.log(`Stages: ${PIPELINE_STAGES.map((s) => s.name).join(' / ')}`)
   },
 }
 
@@ -235,7 +257,10 @@ const importTwentyCmd = {
       dryRun,
       limit,
     })
-    console.log(`\nDone. companies=${stats.companies} people=${stats.people} deals=${stats.deals} skippedExisting=${stats.skippedExisting}`)
+    console.log(
+      `\nDone. companies=${stats.companies} people=${stats.people} ` +
+        `deals=${stats.deals} updated=${stats.updated} skippedExisting=${stats.skippedExisting}`,
+    )
   },
 }
 

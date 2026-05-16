@@ -9,26 +9,39 @@ export type ImportStats = {
   companies: number
   people: number
   deals: number
+  updated: number
   skippedExisting: number
 }
 
-// Twenty's custom opportunity_stage_enum (user-tailored at crm.kawalec.pl)
-// folds sales pipeline + project execution into one list. Phase 1 only
-// models the sales side; everything after `POTWIERDZONO` is treated as won.
+// 1:1 mirror of the Twenty workspace's opportunity_stage_enum.
+// Keep these values in sync with PIPELINE_STAGES in cli.ts.
 const TWENTY_STAGE_MAP: Record<string, string> = {
-  NEW: 'lead',
-  SCREENING: 'qualified',
+  NEW: 'new',
+  PRZETARGI: 'przetargi',
+  SCREENING: 'screening',
   PROPOSAL: 'proposal',
-  POTWIERDZONO: 'won',
-  FAKTURA_ZALICZKOWA: 'won',
-  W_REALIZACJI: 'won',
-  FAKTURA_KONCOWA: 'won',
-  W_AKCEPTACJI: 'won',
-  ZAKONCZENIE: 'won',
-  MRR: 'won',
-  PRZETARGI: 'lead',
-  ODRZUCONO: 'lost',
+  POTWIERDZONO: 'potwierdzono',
+  FAKTURA_ZALICZKOWA: 'faktura_zaliczkowa',
+  W_REALIZACJI: 'w_realizacji',
+  FAKTURA_KONCOWA: 'faktura_koncowa',
+  W_AKCEPTACJI: 'w_akceptacji',
+  ZAKONCZENIE: 'zakonczenie',
+  MRR: 'mrr',
+  ODRZUCONO: 'odrzucono',
 }
+
+// Stages where OM should treat the deal as closed-won / closed-lost so
+// downstream filters (closure_outcome, status) line up.
+const WON_STAGES = new Set([
+  'potwierdzono',
+  'faktura_zaliczkowa',
+  'w_realizacji',
+  'faktura_koncowa',
+  'w_akceptacji',
+  'zakonczenie',
+  'mrr',
+])
+const LOST_STAGES = new Set(['odrzucono'])
 
 async function resolveTwentyWorkspace(twentyClient: PgClient): Promise<string> {
   const res = await twentyClient.query(
@@ -128,7 +141,7 @@ export async function importTwenty(opts: {
       console.log('[dry-run] skipping OM auth and writes')
     }
 
-    const stats: ImportStats = { companies: 0, people: 0, deals: 0, skippedExisting: 0 }
+    const stats: ImportStats = { companies: 0, people: 0, deals: 0, updated: 0, skippedExisting: 0 }
     const companyMap = new Map<string, string>()
     const personMap = new Map<string, string>()
 
@@ -265,21 +278,22 @@ export async function importTwenty(opts: {
     )
 
     // -- Deals --
-    const skippedBeforeDeals = stats.skippedExisting
+    const updatedBefore = stats.updated
     let existingDealByTitle = new Map<string, string>()
     let defaultPipelineId: string | undefined
+    // value (lowercased Twenty enum) -> pipeline_stages.id
     let stageIdByValue = new Map<string, string>()
     if (!opts.dryRun) {
       const list = await omRequest<any>(
         opts.appUrl,
         cookie,
         'GET',
-        '/api/customers/deals?per_page=500',
+        '/api/customers/deals?pageSize=100',
       )
       for (const d of pickItems(list)) {
         if (d?.title && d?.id) existingDealByTitle.set(d.title, d.id)
       }
-      // Resolve default pipeline + stage ids so POST /deals lands rows on the Kanban.
+      // Resolve default pipeline.
       const pipelinesList = await omRequest<any>(
         opts.appUrl,
         cookie,
@@ -296,6 +310,22 @@ export async function importTwenty(opts: {
         const items = pickItems<any>(pipelinesList)
         defaultPipelineId = items[0]?.id
       }
+      // Resolve stage ids. customer_pipeline_stages has only {id, name, position};
+      // map Twenty enum value -> Polish display label -> stage.id.
+      const valueToLabel: Record<string, string> = {
+        new: 'Nowy',
+        przetargi: 'Przetargi',
+        screening: 'Screening',
+        proposal: 'Oferta',
+        potwierdzono: 'Potwierdzono',
+        faktura_zaliczkowa: 'Faktura zaliczkowa',
+        w_realizacji: 'W realizacji',
+        faktura_koncowa: 'Faktura końcowa',
+        w_akceptacji: 'W akceptacji',
+        zakonczenie: 'Zakończenie',
+        mrr: 'MRR',
+        odrzucono: 'Odrzucono',
+      }
       if (defaultPipelineId) {
         const stagesList = await omRequest<any>(
           opts.appUrl,
@@ -303,9 +333,14 @@ export async function importTwenty(opts: {
           'GET',
           `/api/customers/pipeline-stages?pipeline_id=${defaultPipelineId}`,
         )
+        const nameToId = new Map<string, string>()
         for (const s of pickItems(stagesList)) {
-          const name = (s?.name ?? s?.label ?? '').toString().toLowerCase().trim()
-          if (name && s?.id) stageIdByValue.set(name, s.id)
+          const name = (s?.name ?? s?.label ?? '').toString().trim()
+          if (name && s?.id) nameToId.set(name, s.id)
+        }
+        for (const [value, label] of Object.entries(valueToLabel)) {
+          const id = nameToId.get(label)
+          if (id) stageIdByValue.set(value, id)
         }
       }
     }
@@ -320,14 +355,17 @@ export async function importTwenty(opts: {
     )
     for (const row of oppRes.rows) {
       const title = (row.name || '').trim() || `(Twenty deal ${String(row.id).slice(0, 8)})`
-      if (existingDealByTitle.has(title)) {
-        stats.skippedExisting++
-        continue
-      }
-      const stageValue = TWENTY_STAGE_MAP[row.stage as string] || 'lead'
-      const closureOutcome =
-        stageValue === 'won' ? 'won' : stageValue === 'lost' ? 'lost' : undefined
-      const status = stageValue === 'won' ? 'win' : stageValue === 'lost' ? 'loose' : 'open'
+      const stageValue = TWENTY_STAGE_MAP[row.stage as string] || 'new'
+      const closureOutcome = WON_STAGES.has(stageValue)
+        ? 'won'
+        : LOST_STAGES.has(stageValue)
+          ? 'lost'
+          : undefined
+      const status = WON_STAGES.has(stageValue)
+        ? 'win'
+        : LOST_STAGES.has(stageValue)
+          ? 'loose'
+          : 'open'
       const amount = row.amount_micros ? Number(row.amount_micros) / 1_000_000 : undefined
       const companyOmId = row.twenty_company_id ? companyMap.get(row.twenty_company_id) : undefined
       const personOmId = row.twenty_poc_id ? personMap.get(row.twenty_poc_id) : undefined
@@ -338,12 +376,29 @@ export async function importTwenty(opts: {
         stats.deals++
         continue
       }
+      const existingId = existingDealByTitle.get(title)
+      const stageId = stageIdByValue.get(stageValue)
+      if (existingId) {
+        // Idempotent re-run: rewrite stage on the row we created earlier so a
+        // schema change (e.g. switching from hybrid -> Twenty stages) sticks.
+        const body: Record<string, unknown> = {
+          id: existingId,
+          pipelineStage: stageValue,
+          pipelineId: defaultPipelineId,
+          pipelineStageId: stageId,
+          status,
+          closureOutcome,
+        }
+        await omRequest<any>(opts.appUrl, cookie, 'PUT', '/api/customers/deals', body)
+        stats.updated++
+        continue
+      }
       const body: Record<string, unknown> = {
         title,
         status,
         pipelineStage: stageValue,
         pipelineId: defaultPipelineId,
-        pipelineStageId: stageIdByValue.get(stageValue),
+        pipelineStageId: stageId,
         valueAmount: amount,
         valueCurrency: row.ccy || 'PLN',
         expectedCloseAt: row.close_date,
@@ -359,7 +414,7 @@ export async function importTwenty(opts: {
       stats.deals++
     }
     console.log(
-      `Deals: ${stats.deals} created, ${stats.skippedExisting - skippedBeforeDeals} pre-existing`,
+      `Deals: ${stats.deals} created, ${stats.updated - updatedBefore} updated`,
     )
 
     return stats

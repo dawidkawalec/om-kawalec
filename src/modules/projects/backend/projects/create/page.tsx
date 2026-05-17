@@ -3,7 +3,9 @@
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
 import { Page, PageBody } from '@open-mercato/ui/backend/Page'
-import { apiCallOrThrow, readApiResultOrThrow } from '@open-mercato/ui/backend/utils/apiCall'
+import { Button } from '@open-mercato/ui/primitives/button'
+import { Input } from '@open-mercato/ui/primitives/input'
+import { readApiResultOrThrow } from '@open-mercato/ui/backend/utils/apiCall'
 import { flash } from '@open-mercato/ui/backend/FlashMessages'
 
 const STATUS_OPTIONS = [
@@ -49,49 +51,35 @@ export default function CreateProjectPage() {
     }
   }
 
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '8px 10px',
-    border: '1px solid #cbd5e1',
-    borderRadius: 6,
-    fontSize: 14,
-  }
-  const labelStyle: React.CSSProperties = {
-    display: 'block',
-    fontSize: 13,
-    fontWeight: 500,
-    marginBottom: 6,
-    color: '#334155',
-  }
-
   return (
     <Page>
       <PageBody>
-        <h1 style={{ fontSize: 24, fontWeight: 700, marginTop: 0 }}>Nowy projekt</h1>
-        <form onSubmit={onSubmit} style={{ maxWidth: 640 }}>
-          <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Tytuł *</label>
-            <input
-              style={inputStyle}
+        <h1 className="mb-6 text-2xl font-bold tracking-tight">Nowy projekt</h1>
+        <form onSubmit={onSubmit} className="max-w-2xl space-y-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground">Tytuł *</label>
+            <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
               autoFocus
+              placeholder="Np. Wdrożenie wewnętrznego dashboardu"
             />
           </div>
-          <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Opis</label>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground">Opis</label>
             <textarea
-              style={{ ...inputStyle, minHeight: 100, resize: 'vertical' }}
+              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-h-[100px] resize-y"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              placeholder="Krótki opis zakresu / kluczowych deliverables"
             />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <label style={labelStyle}>Status</label>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">Status</label>
               <select
-                style={inputStyle}
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
               >
@@ -103,46 +91,21 @@ export default function CreateProjectPage() {
               </select>
             </div>
             <div>
-              <label style={labelStyle}>Powiązany deal (UUID, opcjonalnie)</label>
-              <input
-                style={inputStyle}
+              <label className="mb-1.5 block text-sm font-medium text-foreground">Powiązany deal (UUID, opcjonalnie)</label>
+              <Input
                 value={dealId}
                 onChange={(e) => setDealId(e.target.value)}
                 placeholder="00000000-0000-0000-0000-000000000000"
               />
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              type="submit"
-              disabled={submitting || !title.trim()}
-              style={{
-                padding: '8px 16px',
-                borderRadius: 6,
-                backgroundColor: '#0f172a',
-                color: '#fff',
-                border: 'none',
-                fontWeight: 500,
-                cursor: submitting ? 'wait' : 'pointer',
-              }}
-            >
+          <div className="flex gap-2 pt-2">
+            <Button type="submit" disabled={submitting || !title.trim()}>
               {submitting ? 'Tworzenie…' : 'Utwórz projekt'}
-            </button>
-            <button
-              type="button"
-              onClick={() => router.back()}
-              style={{
-                padding: '8px 16px',
-                borderRadius: 6,
-                backgroundColor: '#fff',
-                color: '#0f172a',
-                border: '1px solid #cbd5e1',
-                fontWeight: 500,
-                cursor: 'pointer',
-              }}
-            >
+            </Button>
+            <Button type="button" variant="outline" onClick={() => router.back()}>
               Anuluj
-            </button>
+            </Button>
           </div>
         </form>
       </PageBody>

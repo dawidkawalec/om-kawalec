@@ -29,12 +29,12 @@ type Project = {
 }
 
 const COLUMNS = [
-  { value: 'backlog', label: 'Backlog', color: '#94a3b8' },
-  { value: 'todo', label: 'Do zrobienia', color: '#0ea5e9' },
-  { value: 'in_progress', label: 'W toku', color: '#2563eb' },
-  { value: 'accept', label: 'Do akceptacji', color: '#a855f7' },
-  { value: 'blocked', label: 'Zablokowane', color: '#ef4444' },
-  { value: 'done', label: 'Gotowe', color: '#16a34a' },
+  { value: 'backlog', label: 'Backlog', dot: 'bg-slate-400' },
+  { value: 'todo', label: 'Do zrobienia', dot: 'bg-sky-500' },
+  { value: 'in_progress', label: 'W toku', dot: 'bg-blue-600' },
+  { value: 'accept', label: 'Do akceptacji', dot: 'bg-purple-500' },
+  { value: 'blocked', label: 'Zablokowane', dot: 'bg-red-500' },
+  { value: 'done', label: 'Gotowe', dot: 'bg-emerald-600' },
 ]
 
 export default function BoardPage() {
@@ -57,7 +57,6 @@ export default function BoardPage() {
     staleTime: 10_000,
   })
 
-  // local optimistic state for drag-drop
   const [board, setBoard] = React.useState<Record<string, Task[]>>({})
   React.useEffect(() => {
     if (tasksQuery.data?.groups) setBoard(tasksQuery.data.groups)
@@ -130,7 +129,6 @@ export default function BoardPage() {
     setDraggingId(null)
     if (!taskId) return
 
-    // Locate the task across columns
     let fromStatus: string | undefined
     let task: Task | undefined
     for (const col of Object.keys(board)) {
@@ -144,7 +142,6 @@ export default function BoardPage() {
     if (!task) return
     if (fromStatus === targetStatus) return
 
-    // Optimistic update — move task to bottom of target column
     setBoard((prev) => {
       const next: Record<string, Task[]> = { ...prev }
       next[fromStatus!] = (prev[fromStatus!] || []).filter((t) => t.id !== taskId)
@@ -164,7 +161,9 @@ export default function BoardPage() {
     return (
       <Page>
         <PageBody>
-          <Spinner />
+          <div className="flex justify-center py-12">
+            <Spinner />
+          </div>
         </PageBody>
       </Page>
     )
@@ -182,58 +181,35 @@ export default function BoardPage() {
   return (
     <Page>
       <PageBody>
-        <div style={{ marginBottom: 16 }}>
-          <Link href={`/backend/projects/${projectId}`} style={{ color: '#64748b', fontSize: 13 }}>
+        <div className="mb-4">
+          <Link href={`/backend/projects/${projectId}`} className="text-sm text-muted-foreground hover:text-foreground">
             ← {projectQuery.data.title}
           </Link>
-          <h1 style={{ fontSize: 22, fontWeight: 700, margin: '4px 0 0' }}>Tablica zadań</h1>
+          <h1 className="mt-1 text-xl font-bold tracking-tight">Tablica zadań</h1>
         </div>
 
         <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: `repeat(${COLUMNS.length}, minmax(220px, 1fr))`,
-            gap: 12,
-            overflowX: 'auto',
-          }}
+          className="grid gap-3 overflow-x-auto pb-4"
+          style={{ gridTemplateColumns: `repeat(${COLUMNS.length}, minmax(240px, 1fr))` }}
         >
           {COLUMNS.map((col) => {
             const tasks = board[col.value] || []
+            const isActive = activeColumn === col.value
             return (
               <div
                 key={col.value}
                 onDragOver={(e) => handleDragOver(e, col.value)}
                 onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, col.value)}
-                style={{
-                  border: '1px solid #e2e8f0',
-                  borderRadius: 8,
-                  backgroundColor: activeColumn === col.value ? '#f1f5f9' : '#f8fafc',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  minHeight: 400,
-                }}
+                className={`flex min-h-[400px] flex-col rounded-lg border ${
+                  isActive ? 'border-primary bg-primary/5' : 'border-border bg-muted/30'
+                } transition-colors`}
               >
-                <div
-                  style={{
-                    padding: '10px 12px',
-                    borderBottom: '1px solid #e2e8f0',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: 999,
-                        backgroundColor: col.color,
-                      }}
-                    />
-                    <span style={{ fontWeight: 600, fontSize: 14 }}>{col.label}</span>
-                    <span style={{ color: '#94a3b8', fontSize: 12 }}>{tasks.length}</span>
+                <div className="flex items-center justify-between border-b border-border/70 px-3 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className={`h-2 w-2 rounded-full ${col.dot}`} />
+                    <span className="text-sm font-semibold">{col.label}</span>
+                    <span className="text-xs text-muted-foreground">{tasks.length}</span>
                   </div>
                   <button
                     onClick={() => {
@@ -241,20 +217,13 @@ export default function BoardPage() {
                       setNewTaskTitle('')
                     }}
                     title="Dodaj zadanie"
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: '#64748b',
-                      cursor: 'pointer',
-                      fontSize: 18,
-                      lineHeight: 1,
-                    }}
+                    className="rounded text-lg leading-none text-muted-foreground hover:bg-muted hover:text-foreground px-1.5"
                   >
                     +
                   </button>
                 </div>
 
-                <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+                <div className="flex flex-1 flex-col gap-2 p-2">
                   {newTaskForColumn === col.value && (
                     <form
                       onSubmit={(e) => {
@@ -263,7 +232,7 @@ export default function BoardPage() {
                           createMutation.mutate({ title: newTaskTitle.trim(), status: col.value })
                         }
                       }}
-                      style={{ padding: 8, border: '1px dashed #cbd5e1', borderRadius: 6, backgroundColor: '#fff' }}
+                      className="rounded-md border border-dashed border-border bg-background p-2"
                     >
                       <input
                         autoFocus
@@ -279,21 +248,13 @@ export default function BoardPage() {
                           }
                         }}
                         placeholder="Tytuł zadania, Enter aby zapisać"
-                        style={{
-                          width: '100%',
-                          padding: '6px 8px',
-                          border: '1px solid #cbd5e1',
-                          borderRadius: 4,
-                          fontSize: 13,
-                        }}
+                        className="w-full rounded border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
                       />
                     </form>
                   )}
 
                   {tasks.length === 0 && newTaskForColumn !== col.value && (
-                    <div style={{ color: '#cbd5e1', fontSize: 12, textAlign: 'center', padding: 20 }}>
-                      Brak zadań
-                    </div>
+                    <div className="py-6 text-center text-xs text-muted-foreground/60">Brak zadań</div>
                   )}
 
                   {tasks.map((task) => (
@@ -302,39 +263,25 @@ export default function BoardPage() {
                       draggable
                       onDragStart={(e) => handleDragStart(e, task.id)}
                       onDragEnd={() => setDraggingId(null)}
-                      style={{
-                        padding: '10px 12px',
-                        backgroundColor: '#fff',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: 6,
-                        boxShadow: draggingId === task.id ? '0 4px 12px rgba(0,0,0,0.08)' : '0 1px 2px rgba(0,0,0,0.04)',
-                        cursor: 'grab',
-                        opacity: draggingId === task.id ? 0.5 : 1,
-                        fontSize: 13,
-                      }}
+                      className={`group relative cursor-grab rounded-md border border-border bg-card p-2.5 text-sm shadow-sm transition-all hover:shadow ${
+                        draggingId === task.id ? 'opacity-50' : ''
+                      }`}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                        <div style={{ flex: 1 }}>{task.title}</div>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 break-words">{task.title}</div>
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
                             if (confirm('Usunąć zadanie?')) deleteMutation.mutate(task.id)
                           }}
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            color: '#cbd5e1',
-                            cursor: 'pointer',
-                            fontSize: 14,
-                            lineHeight: 1,
-                          }}
+                          className="opacity-0 transition-opacity group-hover:opacity-100 text-muted-foreground hover:text-destructive"
                           title="Usuń"
                         >
                           ×
                         </button>
                       </div>
                       {task.dueAt && (
-                        <div style={{ marginTop: 4, fontSize: 11, color: '#64748b' }}>
+                        <div className="mt-1 text-[11px] text-muted-foreground">
                           do {new Date(task.dueAt).toLocaleDateString('pl-PL')}
                         </div>
                       )}

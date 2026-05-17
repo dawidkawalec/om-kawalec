@@ -7,6 +7,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Page, PageBody } from '@open-mercato/ui/backend/Page'
 import { Spinner } from '@open-mercato/ui/primitives/spinner'
 import { ErrorNotice } from '@open-mercato/ui/primitives/ErrorNotice'
+import { Button } from '@open-mercato/ui/primitives/button'
+import { Input } from '@open-mercato/ui/primitives/input'
 import { apiCallOrThrow, readApiResultOrThrow } from '@open-mercato/ui/backend/utils/apiCall'
 import { flash } from '@open-mercato/ui/backend/FlashMessages'
 
@@ -39,11 +41,11 @@ const STATUS_OPTIONS = [
   { value: 'completed', label: 'Zakończony' },
   { value: 'cancelled', label: 'Anulowany' },
 ]
-const STATUS_COLOR: Record<string, string> = {
-  active: '#2563eb',
-  on_hold: '#f59e0b',
-  completed: '#16a34a',
-  cancelled: '#6b7280',
+const STATUS_TONE: Record<string, string> = {
+  active: 'bg-blue-500/15 text-blue-600 dark:text-blue-300 border border-blue-500/30',
+  on_hold: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30',
+  completed: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30',
+  cancelled: 'bg-slate-500/15 text-slate-600 dark:text-slate-300 border border-slate-500/30',
 }
 const STATUS_LABEL: Record<string, string> = Object.fromEntries(STATUS_OPTIONS.map((o) => [o.value, o.label]))
 
@@ -98,15 +100,24 @@ export default function ProjectDetailPage() {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: async () =>
-      apiCallOrThrow(`/api/projects/${id}`, { method: 'DELETE' }),
+    mutationFn: async () => apiCallOrThrow(`/api/projects/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
       flash('Projekt usunięty', 'success')
       router.push('/backend/projects')
     },
   })
 
-  if (projectQuery.isLoading) return <Page><PageBody><Spinner /></PageBody></Page>
+  if (projectQuery.isLoading)
+    return (
+      <Page>
+        <PageBody>
+          <div className="flex justify-center py-12">
+            <Spinner />
+          </div>
+        </PageBody>
+      </Page>
+    )
+
   if (projectQuery.error || !projectQuery.data) {
     return (
       <Page>
@@ -124,10 +135,10 @@ export default function ProjectDetailPage() {
   return (
     <Page>
       <PageBody>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
-          <div style={{ flex: 1 }}>
+        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="flex-1 min-w-0">
             {editingTitle ? (
-              <input
+              <Input
                 value={titleDraft}
                 onChange={(e) => setTitleDraft(e.target.value)}
                 onBlur={() => {
@@ -141,7 +152,7 @@ export default function ProjectDetailPage() {
                   if (e.key === 'Escape') setEditingTitle(false)
                 }}
                 autoFocus
-                style={{ fontSize: 24, fontWeight: 700, padding: 4, border: '1px solid #cbd5e1', borderRadius: 4, width: '100%', maxWidth: 600 }}
+                className="!h-auto !text-2xl font-bold"
               />
             ) : (
               <h1
@@ -150,52 +161,36 @@ export default function ProjectDetailPage() {
                   setEditingTitle(true)
                 }}
                 title="Klik aby edytować"
-                style={{ fontSize: 24, fontWeight: 700, margin: 0, cursor: 'text' }}
+                className="cursor-text text-2xl font-bold tracking-tight"
               >
                 {project.title}
               </h1>
             )}
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8, fontSize: 13 }}>
-              <span
-                style={{
-                  padding: '2px 8px',
-                  borderRadius: 999,
-                  color: '#fff',
-                  backgroundColor: STATUS_COLOR[project.status] || '#94a3b8',
-                  fontSize: 12,
-                  fontWeight: 500,
-                }}
-              >
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_TONE[project.status] || 'bg-muted text-muted-foreground border border-border'}`}>
                 {STATUS_LABEL[project.status] || project.status}
               </span>
               {project.dealId && (
-                <Link href={`/backend/customers/deals/${project.dealId}`} style={{ color: '#2563eb' }}>
+                <Link
+                  href={`/backend/customers/deals/${project.dealId}`}
+                  className="text-primary hover:underline"
+                >
                   Powiązany deal: {project.dealId.slice(0, 8)}…
                 </Link>
               )}
-              <span style={{ color: '#94a3b8' }}>
+              <span className="text-muted-foreground">
                 Utworzono {new Date(project.createdAt).toLocaleString('pl-PL')}
               </span>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Link
-              href={`/backend/projects/${id}/board`}
-              style={{
-                padding: '8px 14px',
-                borderRadius: 6,
-                backgroundColor: '#0f172a',
-                color: '#fff',
-                textDecoration: 'none',
-                fontWeight: 500,
-              }}
-            >
-              Otwórz tablicę
-            </Link>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild>
+              <Link href={`/backend/projects/${id}/board`}>Otwórz tablicę</Link>
+            </Button>
             <select
               value={project.status}
               onChange={(e) => updateMutation.mutate({ status: e.target.value })}
-              style={{ padding: '8px 10px', border: '1px solid #cbd5e1', borderRadius: 6 }}
+              className="flex h-9 rounded-md border border-input bg-background px-3 py-1 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {STATUS_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -203,39 +198,37 @@ export default function ProjectDetailPage() {
                 </option>
               ))}
             </select>
-            <button
+            <Button
+              variant="outline"
               onClick={() => {
                 if (confirm('Usunąć projekt? Zadania też zostaną usunięte.')) {
                   deleteMutation.mutate()
                 }
               }}
-              style={{
-                padding: '8px 12px',
-                borderRadius: 6,
-                backgroundColor: '#fff',
-                color: '#dc2626',
-                border: '1px solid #fecaca',
-                cursor: 'pointer',
-              }}
+              className="text-destructive hover:bg-destructive/10"
             >
               Usuń
-            </button>
+            </Button>
           </div>
         </div>
 
         {project.description && (
-          <div style={{ padding: 12, backgroundColor: '#f8fafc', borderRadius: 6, marginBottom: 24, fontSize: 14, color: '#334155' }}>
+          <div className="mb-6 rounded-lg border border-border bg-muted/30 p-4 text-sm">
             {project.description}
           </div>
         )}
 
-        <h2 style={{ fontSize: 18, fontWeight: 600, marginTop: 24 }}>Podsumowanie zadań</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8, marginTop: 12 }}>
+        <h2 className="mt-6 text-lg font-semibold">Podsumowanie zadań</h2>
+        <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-6">
           {['backlog', 'todo', 'in_progress', 'accept', 'blocked', 'done'].map((s) => (
-            <div key={s} style={{ padding: 12, border: '1px solid #e2e8f0', borderRadius: 6, textAlign: 'center' }}>
-              <div style={{ fontSize: 12, color: '#64748b' }}>{TASK_STATUS_LABEL[s]}</div>
-              <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>{tasksByStatus[s]?.length ?? 0}</div>
-            </div>
+            <Link
+              key={s}
+              href={`/backend/projects/${id}/board#${s}`}
+              className="rounded-lg border border-border bg-card p-3 text-center transition-colors hover:bg-muted/40"
+            >
+              <div className="text-xs text-muted-foreground">{TASK_STATUS_LABEL[s]}</div>
+              <div className="mt-1 text-2xl font-bold tabular-nums">{tasksByStatus[s]?.length ?? 0}</div>
+            </Link>
           ))}
         </div>
       </PageBody>

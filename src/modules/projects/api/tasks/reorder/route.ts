@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { CrudHttpError } from '@open-mercato/shared/lib/crud/errors'
-import { resolveProjectsContext } from '../../../context'
-import { taskReorderSchema } from '../../../../data/validators'
+import { resolveProjectsContext } from '../../context'
+import { taskReorderSchema } from '../../../data/validators'
 
 export const metadata = {
   POST: { requireAuth: true, requireFeatures: ['projects.tasks.manage'] },

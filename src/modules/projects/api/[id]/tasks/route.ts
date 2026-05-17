@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { CrudHttpError } from '@open-mercato/shared/lib/crud/errors'
-import { resolveProjectsContext } from '../../../context'
-import { taskCreateSchema, taskListQuerySchema, PROJECT_TASK_STATUSES } from '../../../../data/validators'
+import { resolveProjectsContext } from '../../context'
+import { taskCreateSchema, taskListQuerySchema, PROJECT_TASK_STATUSES } from '../../../data/validators'
 
 export const metadata = {
   GET: { requireAuth: true, requireFeatures: ['projects.tasks.view'] },

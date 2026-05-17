@@ -24,6 +24,8 @@ export const enabledModules: ModuleEntry[] = [
   { id: 'ai_assistant', from: '@open-mercato/ai-assistant' },
   // App overlay: project-specific seed CLI + RBAC features.
   { id: 'kawalec', from: '@app' },
+  // App overlay: projects + task Kanban board, auto-created from CustomerDeal on stage=potwierdzono+.
+  { id: 'projects', from: '@app' },
 ]
 
 const enterpriseModulesEnabled = parseBooleanWithDefault(process.env.OM_ENABLE_ENTERPRISE_MODULES, false)

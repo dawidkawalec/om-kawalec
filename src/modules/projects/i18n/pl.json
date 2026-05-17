@@ -1,0 +1,17 @@
+{
+  "projects.nav.group": "Projekty",
+  "projects.nav.list": "Projekty",
+  "projects.nav.create": "Nowy projekt",
+  "projects.nav.detail": "Projekt",
+  "projects.nav.board": "Tablica zadań",
+  "projects.status.active": "Aktywny",
+  "projects.status.on_hold": "Wstrzymany",
+  "projects.status.completed": "Zakończony",
+  "projects.status.cancelled": "Anulowany",
+  "projects.task.status.backlog": "Backlog",
+  "projects.task.status.todo": "Do zrobienia",
+  "projects.task.status.in_progress": "W toku",
+  "projects.task.status.accept": "Do akceptacji",
+  "projects.task.status.blocked": "Zablokowane",
+  "projects.task.status.done": "Gotowe"
+}

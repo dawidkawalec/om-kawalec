@@ -30,6 +30,18 @@ const STAGES = [
   'odrzucono',
 ] as const
 
+// Must stay in sync with PROJECT_STATUSES / PROJECT_TASK_STATUSES in
+// src/modules/projects/data/validators.ts.
+const PROJECT_STATUSES = ['active', 'on_hold', 'completed', 'cancelled'] as const
+const PROJECT_TASK_STATUSES = [
+  'backlog',
+  'todo',
+  'in_progress',
+  'accept',
+  'blocked',
+  'done',
+] as const
+
 export const TOOLS: Tool[] = [
   {
     name: 'list_companies',
@@ -84,6 +96,71 @@ export const TOOLS: Tool[] = [
     description:
       'Return deal counts and total value per pipeline stage in the default pipeline. Useful for sales status questions.',
     inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'list_projects',
+    description:
+      'List projects (delivery/execution side, auto-created from deals at stage potwierdzono+). Returns id, title, status, dealId, open/total tasks count.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: [...PROJECT_STATUSES] },
+        query: { type: 'string', description: 'optional title search' },
+        limit: { type: 'number', default: 50, maximum: 100 },
+      },
+    },
+  },
+  {
+    name: 'get_project',
+    description: 'Fetch a single project with full detail including timestamps and dealId.',
+    inputSchema: {
+      type: 'object',
+      required: ['id'],
+      properties: { id: { type: 'string', description: 'project UUID' } },
+    },
+  },
+  {
+    name: 'list_tasks',
+    description:
+      'List tasks of a project. Pass groupBy=status to receive an object keyed by Kanban column (backlog/todo/in_progress/accept/blocked/done).',
+    inputSchema: {
+      type: 'object',
+      required: ['projectId'],
+      properties: {
+        projectId: { type: 'string' },
+        status: { type: 'string', enum: [...PROJECT_TASK_STATUSES] },
+        groupBy: { type: 'string', enum: ['status'] },
+        limit: { type: 'number', default: 200, maximum: 500 },
+      },
+    },
+  },
+  {
+    name: 'create_task',
+    description: 'Create a task on a project. status defaults to backlog. Returns the created task.',
+    inputSchema: {
+      type: 'object',
+      required: ['projectId', 'title'],
+      properties: {
+        projectId: { type: 'string' },
+        title: { type: 'string' },
+        description: { type: 'string' },
+        status: { type: 'string', enum: [...PROJECT_TASK_STATUSES] },
+      },
+    },
+  },
+  {
+    name: 'move_task',
+    description:
+      'Move a task to a new Kanban column. Sets completed_at automatically when toStatus=done.',
+    inputSchema: {
+      type: 'object',
+      required: ['taskId', 'toStatus'],
+      properties: {
+        taskId: { type: 'string' },
+        toStatus: { type: 'string', enum: [...PROJECT_TASK_STATUSES] },
+        position: { type: 'number', description: 'optional explicit position; otherwise append to bottom' },
+      },
+    },
   },
 ]
 
@@ -255,6 +332,80 @@ async function handlePipelineSummary(om: OmClient) {
   return formatJson({ pipeline: summary, totalDeals: items.length })
 }
 
+// ---- Projects handlers ----
+
+async function handleListProjects(
+  om: OmClient,
+  args: { status?: string; query?: string; limit?: number },
+) {
+  const params = new URLSearchParams({ pageSize: String(Math.min(args.limit ?? 50, 100)) })
+  if (args.query) params.set('search', args.query)
+  if (args.status) params.set('status', args.status)
+  const data = await om.request<ListEnvelope<any>>(`/api/projects?${params}`)
+  const rows = pickItems(data).map((p) => ({
+    id: p.id,
+    title: p.title,
+    status: p.status,
+    dealId: p.dealId ?? p.deal_id ?? null,
+    ownerUserId: p.ownerUserId ?? p.owner_user_id ?? null,
+    openTasksCount: p.openTasksCount ?? p.open_tasks_count ?? 0,
+    tasksCount: p.tasksCount ?? p.tasks_count ?? 0,
+    createdAt: p.createdAt ?? p.created_at,
+  }))
+  return formatJson({
+    count: rows.length,
+    total: (data as any)?.total ?? rows.length,
+    projects: rows,
+  })
+}
+
+async function handleGetProject(om: OmClient, args: { id: string }) {
+  const project = await om.request<any>(`/api/projects/${args.id}`)
+  const tasks = await om
+    .request<ListEnvelope<any>>(`/api/projects/${args.id}/tasks?pageSize=500`)
+    .catch(() => ({ items: [] as any[] }))
+  return formatJson({ project, tasks: pickItems(tasks) })
+}
+
+async function handleListTasks(
+  om: OmClient,
+  args: { projectId: string; status?: string; groupBy?: 'status'; limit?: number },
+) {
+  const params = new URLSearchParams({ pageSize: String(Math.min(args.limit ?? 200, 500)) })
+  if (args.status) params.set('status', args.status)
+  if (args.groupBy === 'status') params.set('groupBy', 'status')
+  const data = await om.request<any>(`/api/projects/${args.projectId}/tasks?${params}`)
+  return formatJson(data)
+}
+
+async function handleCreateTask(
+  om: OmClient,
+  args: { projectId: string; title: string; status?: string; description?: string },
+) {
+  const created = await om.request<any>(`/api/projects/${args.projectId}/tasks`, {
+    method: 'POST',
+    body: {
+      title: args.title,
+      description: args.description,
+      status: args.status,
+    },
+  })
+  return formatJson(created)
+}
+
+async function handleMoveTask(
+  om: OmClient,
+  args: { taskId: string; toStatus: string; position?: number },
+) {
+  const body: Record<string, unknown> = { status: args.toStatus }
+  if (typeof args.position === 'number') body.position = args.position
+  const updated = await om.request<any>(`/api/projects/tasks/${args.taskId}`, {
+    method: 'PUT',
+    body,
+  })
+  return formatJson(updated)
+}
+
 export function registerHandlers(server: Server, om: OmClient) {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
@@ -277,6 +428,21 @@ export function registerHandlers(server: Server, om: OmClient) {
           break
         case 'pipeline_summary':
           text = await handlePipelineSummary(om)
+          break
+        case 'list_projects':
+          text = await handleListProjects(om, args as any)
+          break
+        case 'get_project':
+          text = await handleGetProject(om, args as any)
+          break
+        case 'list_tasks':
+          text = await handleListTasks(om, args as any)
+          break
+        case 'create_task':
+          text = await handleCreateTask(om, args as any)
+          break
+        case 'move_task':
+          text = await handleMoveTask(om, args as any)
           break
         default:
           return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true }
